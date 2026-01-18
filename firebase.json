@@ -1,0 +1,53 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": []
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": [
+    {
+      "bucket": "outfiti-444.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "outfiti-444",
+          "appId": "1:343393362435:android:eeafe22732753abb512436",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "outfiti-444",
+          "appId": "1:343393362435:ios:5aa718baf74eabd6512436",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "outfiti-444",
+          "configurations": {
+            "android": "1:343393362435:android:eeafe22732753abb512436",
+            "ios": "1:343393362435:ios:5aa718baf74eabd6512436"
+          }
+        }
+      }
+    }
+  }
+}

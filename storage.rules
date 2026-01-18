@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Profile images rules - user can only access their own folder
+    match /profile_images/{userId}/{allPaths=**} {
+      // Allow users to read files in their own folder
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Allow users to create/update files in their own folder
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 10 * 1024 * 1024;
+
+      // Allow users to delete files in their own folder
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
