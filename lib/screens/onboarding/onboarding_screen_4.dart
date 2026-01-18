@@ -16,12 +16,14 @@ class OnboardingScreen4 extends StatefulWidget {
   final Uint8List userImage;
   final String description;
   final String targetColor;
+  final double aspectRatio;
 
   const OnboardingScreen4({
     super.key,
     required this.userImage,
     required this.description,
     required this.targetColor,
+    this.aspectRatio = 3 / 4,
   });
 
   @override
@@ -110,6 +112,7 @@ class _OnboardingScreen4State extends State<OnboardingScreen4> {
         selfieImage: widget.userImage,
         userDescription: widget.description,
         targetColor: widget.targetColor,
+        aspectRatio: widget.aspectRatio,
       );
 
       if (mounted) {

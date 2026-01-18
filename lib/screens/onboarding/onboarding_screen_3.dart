@@ -384,6 +384,7 @@ class _OnboardingScreen3State extends State<OnboardingScreen3> {
           userImage: _userImage!,
           description: _description.trim(),
           targetColor: targetStyle,
+          aspectRatio: _imageAspectRatio,
         ),
       ),
     );

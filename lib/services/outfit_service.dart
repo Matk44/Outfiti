@@ -39,6 +39,7 @@ abstract class OutfitService {
   Future<Uint8List> generateOutfit({
     required Uint8List selfieImage,
     required Uint8List referenceImage,
+    double? aspectRatio,
   });
 }
 
@@ -123,6 +124,7 @@ The final image must look like a real, unedited photo of the same person from IN
   Future<Uint8List> generateOutfit({
     required Uint8List selfieImage,
     required Uint8List referenceImage,
+    double? aspectRatio,
   }) async {
     // Convert images to base64
     final selfieBase64 = base64Encode(selfieImage);
@@ -364,6 +366,7 @@ abstract class OutfitStyleService {
   Future<Uint8List> changeOutfitStyle({
     required Uint8List selfieImage,
     required List<Uint8List> clothingItems,
+    double? aspectRatio,
   });
 }
 
@@ -604,6 +607,7 @@ Return ONLY the final transformed image.
   Future<Uint8List> changeOutfitStyle({
     required Uint8List selfieImage,
     required List<Uint8List> clothingItems,
+    double? aspectRatio,
   }) async {
     // Convert user image to base64
     final selfieBase64 = base64Encode(selfieImage);
@@ -726,6 +730,7 @@ abstract class DescribeOutfitService {
     required String targetColor,
     String selectedVibes = '',
     String contextTags = '',
+    double? aspectRatio,
   });
 }
 
@@ -852,6 +857,7 @@ Return ONLY the final transformed image.
     required String targetColor,
     String selectedVibes = '',
     String contextTags = '',
+    double? aspectRatio,
   }) async {
     // Convert image to base64
     final selfieBase64 = base64Encode(selfieImage);
@@ -970,6 +976,7 @@ class MockOutfitService implements OutfitService {
   Future<Uint8List> generateOutfit({
     required Uint8List selfieImage,
     required Uint8List referenceImage,
+    double? aspectRatio,
   }) async {
     // Simulate API processing delay
     await Future.delayed(const Duration(seconds: 3));
@@ -997,6 +1004,7 @@ class FirebaseOutfitService implements OutfitService {
   Future<Uint8List> generateOutfit({
     required Uint8List selfieImage,
     required Uint8List referenceImage,
+    double? aspectRatio,
   }) async {
     final callable = _functions.httpsCallable(
       'generateOutfit',
@@ -1004,10 +1012,17 @@ class FirebaseOutfitService implements OutfitService {
     );
 
     try {
-      final result = await callable.call({
+      final Map<String, dynamic> params = {
         'selfieBase64': base64Encode(selfieImage),
         'referenceBase64': base64Encode(referenceImage),
-      });
+      };
+
+      // Add aspect ratio if provided
+      if (aspectRatio != null) {
+        params['aspectRatio'] = aspectRatio;
+      }
+
+      final result = await callable.call(params);
 
       final imageBase64 = result.data['imageBase64'] as String;
       return base64Decode(imageBase64);
@@ -1035,6 +1050,7 @@ class FirebaseOutfitStyleService implements OutfitStyleService {
   Future<Uint8List> changeOutfitStyle({
     required Uint8List selfieImage,
     required List<Uint8List> clothingItems,
+    double? aspectRatio,
   }) async {
     final callable = _functions.httpsCallable(
       'changeOutfitStyle',
@@ -1045,10 +1061,17 @@ class FirebaseOutfitStyleService implements OutfitStyleService {
       // Convert clothing items to base64 list
       final clothingItemsBase64 = clothingItems.map((item) => base64Encode(item)).toList();
 
-      final result = await callable.call({
+      final Map<String, dynamic> params = {
         'selfieBase64': base64Encode(selfieImage),
         'clothingItemsBase64': clothingItemsBase64,
-      });
+      };
+
+      // Add aspect ratio if provided
+      if (aspectRatio != null) {
+        params['aspectRatio'] = aspectRatio;
+      }
+
+      final result = await callable.call(params);
 
       final imageBase64 = result.data['imageBase64'] as String;
       return base64Decode(imageBase64);
@@ -1079,6 +1102,7 @@ class FirebaseDescribeOutfitService implements DescribeOutfitService {
     required String targetColor,
     String selectedVibes = '',
     String contextTags = '',
+    double? aspectRatio,
   }) async {
     final callable = _functions.httpsCallable(
       'generateFromDescription',
@@ -1086,13 +1110,20 @@ class FirebaseDescribeOutfitService implements DescribeOutfitService {
     );
 
     try {
-      final result = await callable.call({
+      final Map<String, dynamic> params = {
         'selfieBase64': base64Encode(selfieImage),
         'userDescription': userDescription,
         'targetColor': targetColor,
         'selectedVibes': selectedVibes,
         'contextTags': contextTags,
-      });
+      };
+
+      // Add aspect ratio if provided
+      if (aspectRatio != null) {
+        params['aspectRatio'] = aspectRatio;
+      }
+
+      final result = await callable.call(params);
 
       final imageBase64 = result.data['imageBase64'] as String;
       return base64Decode(imageBase64);
@@ -1137,6 +1168,7 @@ class FirebaseOnboardingOutfitService implements DescribeOutfitService {
     required String targetColor,
     String selectedVibes = '',
     String contextTags = '',
+    double? aspectRatio,
   }) async {
     final callable = _functions.httpsCallable(
       'generateOnboardingOutfit',
@@ -1144,13 +1176,20 @@ class FirebaseOnboardingOutfitService implements DescribeOutfitService {
     );
 
     try {
-      final result = await callable.call({
+      final Map<String, dynamic> params = {
         'selfieBase64': base64Encode(selfieImage),
         'userDescription': userDescription,
         'targetColor': targetColor,
         'selectedVibes': selectedVibes,
         'contextTags': contextTags,
-      });
+      };
+
+      // Add aspect ratio if provided
+      if (aspectRatio != null) {
+        params['aspectRatio'] = aspectRatio;
+      }
+
+      final result = await callable.call(params);
 
       final imageBase64 = result.data['imageBase64'] as String;
       return base64Decode(imageBase64);

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -40,6 +41,7 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
   bool _isSelfieRealImage = false; // Track if selfie is real upload or placeholder
   bool _isReferenceRealImage = false; // Track if reference is real upload or placeholder
   bool _isLoadingProfileImage = false; // Track if loading profile image
+  double _imageAspectRatio = 3 / 4; // Default aspect ratio (width/height)
 
   // Placeholder image rotation
   List<Uint8List> _referencePlaceholders = [];
@@ -158,6 +160,22 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
     super.dispose();
   }
 
+  // Calculate aspect ratio from image bytes
+  Future<double> _calculateAspectRatio(Uint8List imageBytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(imageBytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final aspectRatio = image.width / image.height;
+      image.dispose();
+      codec.dispose();
+      return aspectRatio;
+    } catch (e) {
+      debugPrint('Error calculating aspect ratio: $e');
+      return 3 / 4; // Default aspect ratio on error
+    }
+  }
+
   // Pick image from gallery
   Future<void> _pickImage(bool isReference) async {
     try {
@@ -170,6 +188,13 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
 
       if (image != null) {
         final bytes = await image.readAsBytes();
+
+        // Calculate aspect ratio for selfie images (base for output)
+        double? aspectRatio;
+        if (!isReference) {
+          aspectRatio = await _calculateAspectRatio(bytes);
+        }
+
         setState(() {
           if (isReference) {
             referenceImage = bytes;
@@ -177,6 +202,9 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
           } else {
             selfieImage = bytes;
             _isSelfieRealImage = true; // Mark as real image
+            if (aspectRatio != null) {
+              _imageAspectRatio = aspectRatio;
+            }
           }
           // Reset result state when new image is uploaded
           showResult = false;
@@ -210,6 +238,13 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
       final response = await http.get(Uri.parse(profileImageUrl));
       if (response.statusCode == 200) {
         final bytes = response.bodyBytes;
+
+        // Calculate aspect ratio for selfie images (base for output)
+        double? aspectRatio;
+        if (!isReference) {
+          aspectRatio = await _calculateAspectRatio(bytes);
+        }
+
         if (mounted) {
           setState(() {
             if (isReference) {
@@ -218,6 +253,9 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
             } else {
               selfieImage = bytes;
               _isSelfieRealImage = true;
+              if (aspectRatio != null) {
+                _imageAspectRatio = aspectRatio;
+              }
             }
             // Reset result state when new image is loaded
             showResult = false;
@@ -283,6 +321,7 @@ class _OutfitTryOnScreenState extends State<OutfitTryOnScreen>
       final result = await _outfitService.generateOutfit(
         selfieImage: selfieImage!,
         referenceImage: referenceImage!,
+        aspectRatio: _imageAspectRatio,
       );
 
       // Debug: Log result size and compare with input
@@ -1481,10 +1520,10 @@ class BeforeAfterSlider extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // After image (right side - the result with new hairstyle)
+          // After image (right side - the result)
           Image.memory(
             afterImage,
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
             width: double.infinity,
             height: double.infinity,
           ),
@@ -1494,7 +1533,7 @@ class BeforeAfterSlider extends StatelessWidget {
             clipper: _BeforeAfterClipper(sliderPosition),
             child: Image.memory(
               beforeImage,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               width: double.infinity,
               height: double.infinity,
             ),

@@ -16,7 +16,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import fetch from 'node-fetch';
 import { OUTFIT_PROMPT, buildStyleChangePrompt, buildDescribePrompt } from './prompts';
-import { extractImageFromContent } from './utils';
+import { mapToSupportedAspectRatio } from './utils';
 import { executeWithRateLimiting } from './rate-limiter';
 
 // ============================================================
@@ -53,9 +53,8 @@ export { backfillMissingUsers } from './backfill-users';
 // Define the secret for the API key (stored in Secret Manager)
 const laozhangApiKey = defineSecret('LAOZHANG_API_KEY');
 
-// API configuration
-const API_URL = 'https://api.laozhang.ai/v1/chat/completions';
-const MODEL = 'gemini-3-pro-image-preview';
+// API configuration - Google Native Format for aspect ratio control
+const API_URL = 'https://api.laozhang.ai/v1beta/models/gemini-3-pro-image-preview:generateContent';
 
 // Common function options
 const functionOptions = {
@@ -66,10 +65,15 @@ const functionOptions = {
   // TODO: Re-enable App Check after testing
 };
 
+// Google Native Format response interface
 interface ApiResponse {
-  choices?: Array<{
-    message?: {
-      content: string | Array<Record<string, unknown>> | Record<string, unknown>;
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        inlineData?: {
+          data: string;
+        };
+      }>;
     };
   }>;
 }
@@ -93,9 +97,10 @@ export const generateOutfit = onCall(functionOptions, async (request) => {
   }
 
   const uid = request.auth.uid;
-  const { selfieBase64, referenceBase64 } = request.data as {
+  const { selfieBase64, referenceBase64, aspectRatio } = request.data as {
     selfieBase64?: string;
     referenceBase64?: string;
+    aspectRatio?: number;
   };
 
   // Validate inputs BEFORE rate limiting (fast fail)
@@ -109,20 +114,40 @@ export const generateOutfit = onCall(functionOptions, async (request) => {
     throw new HttpsError('invalid-argument', 'Image size exceeds maximum allowed (10MB)');
   }
 
+  // Map aspect ratio to supported value (default to 3:4 portrait if not provided)
+  const aspectRatioStr = aspectRatio
+    ? mapToSupportedAspectRatio(aspectRatio)
+    : "3:4";
+
   // Execute with rate limiting and credit protection
   // Credits are ONLY consumed if generation succeeds
   return executeWithRateLimiting(uid, 1, async () => {
+    // Google Native Format payload
     const payload = {
-      model: MODEL,
-      stream: false,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: OUTFIT_PROMPT },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${selfieBase64}` } },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${referenceBase64}` } },
+      contents: [{
+        parts: [
+          { text: OUTFIT_PROMPT },
+          {
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: selfieBase64
+            }
+          },
+          {
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: referenceBase64
+            }
+          }
         ]
-      }]
+      }],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: aspectRatioStr,
+          imageSize: "2K"  // Higher quality than default 1K
+        }
+      }
     };
 
     const response = await fetch(API_URL, {
@@ -141,13 +166,9 @@ export const generateOutfit = onCall(functionOptions, async (request) => {
     }
 
     const result = await response.json() as ApiResponse;
-    const content = result.choices?.[0]?.message?.content;
 
-    if (!content) {
-      throw new HttpsError('internal', 'No content in API response');
-    }
-
-    const imageData = extractImageFromContent(content);
+    // Extract image from Google Native Format response
+    const imageData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!imageData) {
       console.error('Could not extract image from response:', JSON.stringify(result).substring(0, 500));
@@ -180,9 +201,10 @@ export const changeOutfitStyle = onCall(functionOptions, async (request) => {
   }
 
   const uid = request.auth.uid;
-  const { selfieBase64, clothingItemsBase64 } = request.data as {
+  const { selfieBase64, clothingItemsBase64, aspectRatio } = request.data as {
     selfieBase64?: string;
     clothingItemsBase64?: string[];
+    aspectRatio?: number;
   };
 
   // Validate inputs BEFORE rate limiting (fast fail)
@@ -211,30 +233,47 @@ export const changeOutfitStyle = onCall(functionOptions, async (request) => {
     }
   }
 
+  // Map aspect ratio to supported value (default to 3:4 portrait if not provided)
+  const aspectRatioStr = aspectRatio
+    ? mapToSupportedAspectRatio(aspectRatio)
+    : "3:4";
+
   // Execute with rate limiting and credit protection
   // Credits are ONLY consumed if generation succeeds
   return executeWithRateLimiting(uid, 1, async () => {
-    // Build content array with prompt, user image, and all clothing items
-    const messageContent: Array<Record<string, unknown>> = [
-      { type: 'text', text: buildStyleChangePrompt('') },
-      { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${selfieBase64}` } },
+    // Build parts array with prompt, user image, and all clothing items (Google Native Format)
+    const parts: Array<Record<string, unknown>> = [
+      { text: buildStyleChangePrompt('') },
+      {
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: selfieBase64
+        }
+      }
     ];
 
     // Add all clothing item images
     for (const clothingItemBase64 of clothingItemsBase64) {
-      messageContent.push({
-        type: 'image_url',
-        image_url: { url: `data:image/jpeg;base64,${clothingItemBase64}` }
+      parts.push({
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: clothingItemBase64
+        }
       });
     }
 
+    // Google Native Format payload
     const payload = {
-      model: MODEL,
-      stream: false,
-      messages: [{
-        role: 'user',
-        content: messageContent
-      }]
+      contents: [{
+        parts: parts
+      }],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: aspectRatioStr,
+          imageSize: "2K"  // Higher quality than default 1K
+        }
+      }
     };
 
     const response = await fetch(API_URL, {
@@ -253,13 +292,9 @@ export const changeOutfitStyle = onCall(functionOptions, async (request) => {
     }
 
     const result = await response.json() as ApiResponse;
-    const content = result.choices?.[0]?.message?.content;
 
-    if (!content) {
-      throw new HttpsError('internal', 'No content in API response');
-    }
-
-    const imageData = extractImageFromContent(content);
+    // Extract image from Google Native Format response
+    const imageData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!imageData) {
       console.error('Could not extract image from response:', JSON.stringify(result).substring(0, 500));
@@ -292,12 +327,13 @@ export const generateFromDescription = onCall(functionOptions, async (request) =
   }
 
   const uid = request.auth.uid;
-  const { selfieBase64, userDescription, targetColor, selectedVibes, contextTags } = request.data as {
+  const { selfieBase64, userDescription, targetColor, selectedVibes, contextTags, aspectRatio } = request.data as {
     selfieBase64?: string;
     userDescription?: string;
     targetColor?: string;
     selectedVibes?: string;
     contextTags?: string;
+    aspectRatio?: number;
   };
 
   // Validate inputs BEFORE rate limiting (fast fail)
@@ -321,19 +357,34 @@ export const generateFromDescription = onCall(functionOptions, async (request) =
     throw new HttpsError('invalid-argument', 'Style direction too long (max 500 characters)');
   }
 
+  // Map aspect ratio to supported value (default to 3:4 portrait if not provided)
+  const aspectRatioStr = aspectRatio
+    ? mapToSupportedAspectRatio(aspectRatio)
+    : "3:4";
+
   // Execute with rate limiting and credit protection
   // Credits are ONLY consumed if generation succeeds
   return executeWithRateLimiting(uid, 1, async () => {
+    // Google Native Format payload
     const payload = {
-      model: MODEL,
-      stream: false,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: buildDescribePrompt(userDescription, targetColor || '', selectedVibes || '', contextTags || '') },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${selfieBase64}` } },
+      contents: [{
+        parts: [
+          { text: buildDescribePrompt(userDescription, targetColor || '', selectedVibes || '', contextTags || '') },
+          {
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: selfieBase64
+            }
+          }
         ]
-      }]
+      }],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: aspectRatioStr,
+          imageSize: "2K"  // Higher quality than default 1K
+        }
+      }
     };
 
     const response = await fetch(API_URL, {
@@ -352,13 +403,9 @@ export const generateFromDescription = onCall(functionOptions, async (request) =
     }
 
     const result = await response.json() as ApiResponse;
-    const content = result.choices?.[0]?.message?.content;
 
-    if (!content) {
-      throw new HttpsError('internal', 'No content in API response');
-    }
-
-    const imageData = extractImageFromContent(content);
+    // Extract image from Google Native Format response
+    const imageData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!imageData) {
       console.error('Could not extract image from response:', JSON.stringify(result).substring(0, 500));
@@ -400,12 +447,13 @@ export const generateOnboardingOutfit = onCall(functionOptions, async (request) 
   }
 
   const uid = request.auth.uid;
-  const { selfieBase64, userDescription, targetColor, selectedVibes, contextTags } = request.data as {
+  const { selfieBase64, userDescription, targetColor, selectedVibes, contextTags, aspectRatio } = request.data as {
     selfieBase64?: string;
     userDescription?: string;
     targetColor?: string;
     selectedVibes?: string;
     contextTags?: string;
+    aspectRatio?: number;
   };
 
   // Validate inputs BEFORE checking onboarding status (fast fail)
@@ -467,17 +515,31 @@ export const generateOnboardingOutfit = onCall(functionOptions, async (request) 
 
   console.log(`User ${uid} using FREE onboarding generation (no credits consumed)`);
 
-  // Perform the actual generation (no credit consumption)
+  // Map aspect ratio to supported value (default to 3:4 portrait if not provided)
+  const aspectRatioStr = aspectRatio
+    ? mapToSupportedAspectRatio(aspectRatio)
+    : "3:4";
+
+  // Perform the actual generation (no credit consumption) - Google Native Format
   const payload = {
-    model: MODEL,
-    stream: false,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'text', text: buildDescribePrompt(userDescription, targetColor || '', selectedVibes || '', contextTags || '') },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${selfieBase64}` } },
+    contents: [{
+      parts: [
+        { text: buildDescribePrompt(userDescription, targetColor || '', selectedVibes || '', contextTags || '') },
+        {
+          inline_data: {
+            mime_type: 'image/jpeg',
+            data: selfieBase64
+          }
+        }
       ]
-    }]
+    }],
+    generationConfig: {
+      responseModalities: ["IMAGE"],
+      imageConfig: {
+        aspectRatio: aspectRatioStr,
+        imageSize: "2K"  // Higher quality than default 1K
+      }
+    }
   };
 
   const response = await fetch(API_URL, {
@@ -496,13 +558,9 @@ export const generateOnboardingOutfit = onCall(functionOptions, async (request) 
   }
 
   const result = await response.json() as ApiResponse;
-  const content = result.choices?.[0]?.message?.content;
 
-  if (!content) {
-    throw new HttpsError('internal', 'No content in API response');
-  }
-
-  const imageData = extractImageFromContent(content);
+  // Extract image from Google Native Format response
+  const imageData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
   if (!imageData) {
     console.error('Could not extract image from response:', JSON.stringify(result).substring(0, 500));

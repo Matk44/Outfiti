@@ -470,6 +470,7 @@ class _DescribeScreenState extends State<DescribeScreen>
         targetColor: targetColor,
         selectedVibes: selectedVibes,
         contextTags: contextTags,
+        aspectRatio: _imageAspectRatio,
       );
 
       if (mounted) {

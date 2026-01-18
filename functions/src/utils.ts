@@ -146,3 +146,41 @@ function isValidBase64(str: string): boolean {
   const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
   return base64Regex.test(cleaned) && cleaned.length > 0;
 }
+
+/**
+ * Maps a calculated aspect ratio (width/height) to the nearest supported API aspect ratio string
+ *
+ * Supported by laozhang API: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 3:2, 2:3, 5:4, 4:5
+ *
+ * @param aspectRatio - The calculated aspect ratio (width/height)
+ * @returns The nearest supported aspect ratio string
+ */
+export function mapToSupportedAspectRatio(aspectRatio: number): string {
+  const ratios = [
+    { value: 1.0, string: "1:1" },      // 1.000 - square
+    { value: 0.75, string: "3:4" },     // 0.750 - portrait (default)
+    { value: 1.33, string: "4:3" },     // 1.333 - landscape
+    { value: 0.67, string: "2:3" },     // 0.667 - portrait
+    { value: 1.5, string: "3:2" },      // 1.500 - landscape
+    { value: 1.78, string: "16:9" },    // 1.778 - wide landscape
+    { value: 0.56, string: "9:16" },    // 0.563 - tall portrait
+    { value: 2.33, string: "21:9" },    // 2.333 - ultra-wide
+    { value: 1.25, string: "5:4" },     // 1.250 - square-ish landscape
+    { value: 0.8, string: "4:5" },      // 0.800 - square-ish portrait
+  ];
+
+  // Find closest match
+  let closest = ratios[1]; // Default to 3:4 (portrait)
+  let minDiff = Math.abs(aspectRatio - closest.value);
+
+  for (const ratio of ratios) {
+    const diff = Math.abs(aspectRatio - ratio.value);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = ratio;
+    }
+  }
+
+  console.log(`Mapped aspect ratio ${aspectRatio.toFixed(3)} to ${closest.string}`);
+  return closest.string;
+}

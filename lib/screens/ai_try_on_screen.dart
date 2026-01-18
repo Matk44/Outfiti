@@ -268,6 +268,7 @@ class _AITryOnScreenState extends State<AITryOnScreen>
       final result = await _styleService.changeOutfitStyle(
         selfieImage: _userImage!,
         clothingItems: nonNullClothingItems,
+        aspectRatio: _imageAspectRatio,
       );
 
       if (mounted) {
@@ -1400,15 +1401,15 @@ class BeforeAfterSlider extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // After image (right side - the result, fills container)
+          // After image (right side - the result)
           Image.memory(
             afterImage,
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
             width: double.infinity,
             height: double.infinity,
           ),
 
-          // Before image (left side - clipped, shows full image)
+          // Before image (left side - clipped)
           ClipRect(
             clipper: _BeforeAfterClipper(sliderPosition),
             child: Image.memory(
